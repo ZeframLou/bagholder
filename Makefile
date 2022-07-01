@@ -12,4 +12,4 @@ test   :; forge test
 trace   :; forge test -vvv
 clean  :; forge clean
 snapshot :; forge snapshot
-fmt    :; forge fmt
+fmt    :; forge fmt && forge fmt tests/

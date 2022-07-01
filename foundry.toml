@@ -8,6 +8,7 @@ remappings = [
   "forge-std/=lib/forge-std/src/"
 ]
 verbosity = 1
+test = 'tests'
 
 # Extreme Fuzzing CI Profile :P
 [ci]

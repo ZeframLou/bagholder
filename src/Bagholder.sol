@@ -119,7 +119,7 @@ contract Bagholder {
         bytes32 incentiveId = key.compute();
 
         // check the NFT is currently being staked in the incentive
-        if (stakes[incentiveId][nftId].staker == msg.sender) {
+        if (stakes[incentiveId][nftId].staker != msg.sender) {
             revert Bagholder__NotStaked();
         }
 

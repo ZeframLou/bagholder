@@ -1,10 +1,10 @@
-// SPDX-License-Identifier: Unlicense
-pragma solidity ^0.8.4;
+// SPDX-License-Identifier: AGPL-3.0
+pragma solidity ^0.8.14;
 
 import "forge-std/Test.sol";
 import {console2} from "forge-std/console2.sol";
 
-contract ContractTest is Test {
+contract BagholderTest is Test {
     function setUp() public {}
 
     function testExample() public {

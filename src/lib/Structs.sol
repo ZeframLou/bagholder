@@ -13,10 +13,6 @@ struct IncentiveKey {
     uint256 bondAmount;
 }
 
-struct Stake {
-    address staker;
-}
-
 struct StakerInfo {
     uint256 totalRewardUnclaimed;
     uint128 rewardPerTokenClaimed;

@@ -43,7 +43,7 @@ contract Bagholder {
     /// Storage variables
     /// -----------------------------------------------------------------------
 
-    mapping(bytes32 => mapping(uint256 => Stake)) public stakes;
+    mapping(bytes32 => mapping(uint256 => address)) public stakers;
     mapping(bytes32 => mapping(address => StakerInfo)) public stakerInfos;
     mapping(bytes32 => IncentiveInfo) public incentiveInfos;
 
@@ -68,7 +68,7 @@ contract Bagholder {
         }
 
         // check the NFT is not currently being staked in this incentive
-        if (stakes[incentiveId][nftId].staker != address(0)) {
+        if (stakers[incentiveId][nftId] != address(0)) {
             revert Bagholder__AlreadyStaked();
         }
 
@@ -93,7 +93,7 @@ contract Bagholder {
             _accrueRewards(key, stakerInfo, incentiveInfo);
 
         // update stake state
-        stakes[incentiveId][nftId] = Stake({staker: msg.sender});
+        stakers[incentiveId][nftId] = msg.sender;
 
         // update staker state
         stakerInfo.numberOfStakedTokens += 1;
@@ -119,7 +119,7 @@ contract Bagholder {
         bytes32 incentiveId = key.compute();
 
         // check the NFT is currently being staked in the incentive
-        if (stakes[incentiveId][nftId].staker != msg.sender) {
+        if (stakers[incentiveId][nftId] != msg.sender) {
             revert Bagholder__NotStaked();
         }
 
@@ -144,7 +144,7 @@ contract Bagholder {
             _accrueRewards(key, stakerInfo, incentiveInfo);
 
         // update NFT state
-        delete stakes[incentiveId][nftId];
+        delete stakers[incentiveId][nftId];
 
         // update staker state
         stakerInfo.numberOfStakedTokens -= 1;
@@ -177,7 +177,7 @@ contract Bagholder {
         bytes32 incentiveId = key.compute();
 
         // check the NFT is currently being staked in this incentive by someone other than the NFT owner
-        address staker = stakes[incentiveId][nftId].staker;
+        address staker = stakers[incentiveId][nftId];
         if (staker == address(0) || staker == key.nft.ownerOf(nftId)) {
             revert Bagholder__NotPaperHand();
         }
@@ -198,7 +198,7 @@ contract Bagholder {
             _accrueRewards(key, stakerInfo, incentiveInfo);
 
         // update NFT state
-        delete stakes[incentiveId][nftId];
+        delete stakers[incentiveId][nftId];
 
         // update staker state
         stakerInfo.numberOfStakedTokens -= 1;

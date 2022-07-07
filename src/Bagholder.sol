@@ -11,6 +11,12 @@ import "./lib/Structs.sol";
 import {FullMath} from "./lib/FullMath.sol";
 import {IncentiveId} from "./lib/IncentiveId.sol";
 
+/// @title Bagholder
+/// @author zefram.eth
+/// @notice Incentivize NFT holders to keep holding their bags without letting their
+/// precious NFTs leave their wallets.
+/// @dev Uses an optimistic staking model where if someone staked and then transferred
+/// their NFT elsewhere, someone else can slash them and receive the staker's bond.
 contract Bagholder {
     /// -----------------------------------------------------------------------
     /// Library usage
@@ -25,32 +31,61 @@ contract Bagholder {
     /// Errors
     /// -----------------------------------------------------------------------
 
+    /// @notice Thrown when unstaking an NFT that hasn't been staked
     error Bagholder__NotStaked();
+
+    /// @notice Thrown when an unauthorized account tries to perform an action available
+    /// only to the NFT's owner
     error Bagholder__NotNftOwner();
+
+    /// @notice Thrown when trying to slash someone who shouldn't be slashed
     error Bagholder__NotPaperHand();
+
+    /// @notice Thrown when staking an NFT that's already staked
     error Bagholder__AlreadyStaked();
-    error Bagholder__BondInsufficient();
+
+    /// @notice Thrown when the bond provided by the staker differs from the specified amount
+    error Bagholder__BondIncorrect();
+
+    /// @notice Thrown when creating an incentive using invalid parameters (e.g. start time is after end time)
     error Bagholder__InvalidIncentiveKey();
+
+    /// @notice Thrown when creating an incentive that already exists
     error Bagholder__IncentiveAlreadyExists();
 
     /// -----------------------------------------------------------------------
     /// Constants
     /// -----------------------------------------------------------------------
 
+    /// @notice The precision used by rewardPerToken
     uint256 internal constant PRECISION = 1e27;
 
     /// -----------------------------------------------------------------------
     /// Storage variables
     /// -----------------------------------------------------------------------
 
+    /// @notice Records the address that staked an NFT into an incentive.
+    /// Zero address if the NFT hasn't been staked into the incentive.
+    /// @dev incentive ID => NFT ID => staker address
     mapping(bytes32 => mapping(uint256 => address)) public stakers;
+
+    /// @notice Records accounting info about each staker.
+    /// @dev incentive ID => staker address => info
     mapping(bytes32 => mapping(address => StakerInfo)) public stakerInfos;
+
+    /// @notice Records accounting info about each incentive.
+    /// @dev incentive ID => info
     mapping(bytes32 => IncentiveInfo) public incentiveInfos;
 
     /// -----------------------------------------------------------------------
     /// Public actions
     /// -----------------------------------------------------------------------
 
+    /// @notice Stakes an NFT into an incentive. The NFT stays in the user's wallet.
+    /// The caller must provide the ETH bond (specified in the incentive key) as part of
+    /// the call. Anyone can stake on behalf of anyone else, provided they provide the bond.
+    /// @param key the incentive's key
+    /// @param nftId the ID of the NFT
     function stake(IncentiveKey calldata key, uint256 nftId)
         external
         payable
@@ -62,9 +97,9 @@ contract Bagholder {
 
         bytes32 incentiveId = key.compute();
 
-        // check bond is sufficient
-        if (msg.value < key.bondAmount) {
-            revert Bagholder__BondInsufficient();
+        // check bond is correct
+        if (msg.value != key.bondAmount) {
+            revert Bagholder__BondIncorrect();
         }
 
         // check the NFT is not currently being staked in this incentive
@@ -72,16 +107,12 @@ contract Bagholder {
             revert Bagholder__AlreadyStaked();
         }
 
-        // check msg.sender owns the NFT
-        if (key.nft.ownerOf(nftId) != msg.sender) {
-            revert Bagholder__NotNftOwner();
-        }
-
         /// -----------------------------------------------------------------------
         /// Storage loads
         /// -----------------------------------------------------------------------
 
-        StakerInfo memory stakerInfo = stakerInfos[incentiveId][msg.sender];
+        address staker = key.nft.ownerOf(nftId);
+        StakerInfo memory stakerInfo = stakerInfos[incentiveId][staker];
         IncentiveInfo memory incentiveInfo = incentiveInfos[incentiveId];
 
         /// -----------------------------------------------------------------------
@@ -93,17 +124,22 @@ contract Bagholder {
             _accrueRewards(key, stakerInfo, incentiveInfo);
 
         // update stake state
-        stakers[incentiveId][nftId] = msg.sender;
+        stakers[incentiveId][nftId] = staker;
 
         // update staker state
         stakerInfo.numberOfStakedTokens += 1;
-        stakerInfos[incentiveId][msg.sender] = stakerInfo;
+        stakerInfos[incentiveId][staker] = stakerInfo;
 
         // update incentive state
         incentiveInfo.numberOfStakedTokens += 1;
         incentiveInfos[incentiveId] = incentiveInfo;
     }
 
+    /// @notice Unstakes an NFT from an incentive and returns the ETH bond.
+    /// The caller must be the owner of the NFT AND the current staker.
+    /// @param key the incentive's key
+    /// @param nftId the ID of the NFT
+    /// @param bondRecipient the recipient of the ETH bond
     function unstake(
         IncentiveKey calldata key,
         uint256 nftId,
@@ -162,7 +198,12 @@ contract Bagholder {
         bondRecipient.safeTransferETH(key.bondAmount);
     }
 
-    function punishPaperHand(
+    /// @notice Slashes a staker who has transferred the staked NFT to another address.
+    /// The bond is given to the slasher as reward.
+    /// @param key the incentive's key
+    /// @param nftId the ID of the NFT
+    /// @param bondRecipient the recipient of the ETH bond
+    function slashPaperHand(
         IncentiveKey calldata key,
         uint256 nftId,
         address bondRecipient
@@ -216,6 +257,10 @@ contract Bagholder {
         bondRecipient.safeTransferETH(key.bondAmount);
     }
 
+    /// @notice Creates an incentive and transfers the reward tokens from the caller.
+    /// @dev Will revert if the incentive key is invalid (e.g. startTime >= endTime)
+    /// @param key the incentive's key
+    /// @param rewardAmount the amount of reward tokens to add to the incentive
     function createIncentive(IncentiveKey calldata key, uint256 rewardAmount)
         external
         virtual
@@ -268,9 +313,14 @@ contract Bagholder {
         );
     }
 
+    /// @notice Claims the reward tokens the caller has earned from a particular incentive.
+    /// @param key the incentive's key
+    /// @param recipient the recipient of the reward tokens
+    /// @return rewardAmount the amount of reward tokens claimed
     function claimRewards(IncentiveKey calldata key, address recipient)
         external
         virtual
+        returns (uint256 rewardAmount)
     {
         bytes32 incentiveId = key.compute();
 
@@ -290,7 +340,7 @@ contract Bagholder {
             _accrueRewards(key, stakerInfo, incentiveInfo);
 
         // update staker state
-        uint256 totalRewardUnclaimed = stakerInfo.totalRewardUnclaimed;
+        rewardAmount = stakerInfo.totalRewardUnclaimed;
         stakerInfo.totalRewardUnclaimed = 0;
         stakerInfos[incentiveId][msg.sender] = stakerInfo;
 
@@ -302,15 +352,16 @@ contract Bagholder {
         /// -----------------------------------------------------------------------
 
         // transfer reward to user
-        key.rewardToken.safeTransferFrom(
-            address(this), recipient, totalRewardUnclaimed
-        );
+        key.rewardToken.safeTransferFrom(address(this), recipient, rewardAmount);
     }
 
     /// -----------------------------------------------------------------------
     /// View functions
     /// -----------------------------------------------------------------------
 
+    /// @notice Computes the current rewardPerToken value of an incentive.
+    /// @param key the incentive's key
+    /// @return the rewardPerToken value
     function rewardPerToken(IncentiveKey calldata key)
         external
         view
@@ -322,6 +373,11 @@ contract Bagholder {
         );
     }
 
+    /// @notice Computes the amount of reward tokens a staker has accrued
+    /// from an incentive.
+    /// @param key the incentive's key
+    /// @param staker the staker's address
+    /// @return the amount of reward tokens accrued
     function earned(IncentiveKey calldata key, address staker)
         external
         view
@@ -368,7 +424,7 @@ contract Bagholder {
         return
             FullMath.mulDiv(
                 info.numberOfStakedTokens,
-                rewardPerToken_ - info.rewardPerTokenClaimed,
+                rewardPerToken_ - info.rewardPerTokenStored,
                 PRECISION
             )
             + info.totalRewardUnclaimed;
@@ -390,7 +446,7 @@ contract Bagholder {
         incentiveInfo.rewardPerTokenStored = rewardPerToken_.safeCastTo128();
         incentiveInfo.lastUpdateTime = lastTimeRewardApplicable.safeCastTo64();
         stakerInfo.totalRewardUnclaimed = _earned(stakerInfo, rewardPerToken_);
-        stakerInfo.rewardPerTokenClaimed = rewardPerToken_.safeCastTo128();
+        stakerInfo.rewardPerTokenStored = rewardPerToken_.safeCastTo128();
 
         return (stakerInfo, incentiveInfo);
     }

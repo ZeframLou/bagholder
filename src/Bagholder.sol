@@ -58,12 +58,12 @@ contract Bagholder {
     /// -----------------------------------------------------------------------
 
     event Stake(
-        address indexed sender,
+        address indexed staker,
         bytes32 indexed incentiveId,
         uint256 indexed nftId
     );
     event Unstake(
-        address indexed sender,
+        address indexed staker,
         bytes32 indexed incentiveId,
         uint256 indexed nftId,
         address bondRecipient
@@ -81,7 +81,7 @@ contract Bagholder {
         uint256 rewardAmount
     );
     event ClaimRewards(
-        address indexed sender,
+        address indexed staker,
         bytes32 indexed incentiveId,
         address recipient
     );
@@ -170,7 +170,76 @@ contract Bagholder {
         incentiveInfo.numberOfStakedTokens += 1;
         incentiveInfos[incentiveId] = incentiveInfo;
 
-        emit Stake(msg.sender, incentiveId, nftId);
+        emit Stake(staker, incentiveId, nftId);
+    }
+
+    /// @notice Stakes multiple NFTs into incentives. The NFTs stay in the user's wallet.
+    /// The caller must provide the ETH bond (specified in the incentive keys) as part of
+    /// the call. Anyone can stake on behalf of anyone else, provided they provide the bond.
+    /// @param inputs The array of inputs, with each input consisting of an incentive key
+    /// and an NFT ID.
+    function stakeMultiple(StakeMultipleInput[] calldata inputs)
+        external
+        payable
+        virtual
+    {
+        uint256 numInputs = inputs.length;
+        uint256 totalBondRequired;
+        for (uint256 i; i < numInputs; ) {
+            /// -----------------------------------------------------------------------
+            /// Validation
+            /// -----------------------------------------------------------------------
+
+            bytes32 incentiveId = inputs[i].key.compute();
+            uint256 nftId = inputs[i].nftId;
+
+            // check the NFT is not currently being staked in this incentive
+            if (stakers[incentiveId][nftId] != address(0)) {
+                revert Bagholder__AlreadyStaked();
+            }
+
+            /// -----------------------------------------------------------------------
+            /// Storage loads
+            /// -----------------------------------------------------------------------
+
+            address staker = inputs[i].key.nft.ownerOf(nftId);
+            StakerInfo memory stakerInfo = stakerInfos[incentiveId][staker];
+            IncentiveInfo memory incentiveInfo = incentiveInfos[incentiveId];
+
+            /// -----------------------------------------------------------------------
+            /// State updates
+            /// -----------------------------------------------------------------------
+
+            // accrue rewards
+            (stakerInfo, incentiveInfo) = _accrueRewards(
+                inputs[i].key,
+                stakerInfo,
+                incentiveInfo
+            );
+
+            // update stake state
+            stakers[incentiveId][nftId] = staker;
+
+            // update staker state
+            stakerInfo.numberOfStakedTokens += 1;
+            stakerInfos[incentiveId][staker] = stakerInfo;
+
+            // update incentive state
+            incentiveInfo.numberOfStakedTokens += 1;
+            incentiveInfos[incentiveId] = incentiveInfo;
+
+            emit Stake(staker, incentiveId, nftId);
+
+            totalBondRequired += inputs[i].key.bondAmount;
+            unchecked {
+                ++i;
+            }
+        }
+
+        // check bond is correct
+        if (msg.value != totalBondRequired) {
+            revert Bagholder__BondIncorrect();
+        }
     }
 
     /// @notice Unstakes an NFT from an incentive and returns the ETH bond.

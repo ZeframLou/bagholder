@@ -9,6 +9,7 @@ remappings = [
 ]
 verbosity = 1
 test = 'tests'
+gas_reports = ["Bagholder"]
 
 # Extreme Fuzzing CI Profile :P
 [profile.ci]

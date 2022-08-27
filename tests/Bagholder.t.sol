@@ -47,11 +47,12 @@ contract BagholderTest is Test {
 
         // mint NFT
         nft.safeMint(alice, 1);
-        nft.safeMint(bob, 2);
+        nft.safeMint(alice, 2);
     }
 
     function test_stake() public {
         startHoax(alice);
+        uint256 beforeBalance = alice.balance;
         bagholder.stake{value: BOND}(key, 1);
 
         // verify staker
@@ -74,6 +75,63 @@ contract BagholderTest is Test {
             );
             assertEq(numberOfStakedTokens, 1, "numberOfStakedTokens not 1");
         }
+
+        // verify bond
+        assertEqDecimal(
+            beforeBalance - alice.balance,
+            BOND,
+            18,
+            "didn't charge bond"
+        );
+    }
+
+    function test_stakeMultiple() public {
+        startHoax(alice);
+        StakeMultipleInput[] memory inputs = new StakeMultipleInput[](2);
+        inputs[0].key = key;
+        inputs[0].nftId = 1;
+        inputs[1].key = key;
+        inputs[1].nftId = 2;
+        uint256 beforeBalance = alice.balance;
+        bagholder.stakeMultiple{value: BOND * 2}(inputs);
+
+        // verify staker
+        bytes32 incentiveId = key.compute();
+        assertEq(
+            bagholder.stakers(incentiveId, 1),
+            alice,
+            "staker 1 incorrect"
+        );
+        assertEq(
+            bagholder.stakers(incentiveId, 2),
+            alice,
+            "staker 2 incorrect"
+        );
+
+        // verify stakerInfo
+        {
+            (, , uint64 numberOfStakedTokens) = bagholder.stakerInfos(
+                incentiveId,
+                alice
+            );
+            assertEq(numberOfStakedTokens, 2, "numberOfStakedTokens not 2");
+        }
+
+        // verify incentiveInfo
+        {
+            (, , uint64 numberOfStakedTokens, ) = bagholder.incentiveInfos(
+                incentiveId
+            );
+            assertEq(numberOfStakedTokens, 2, "numberOfStakedTokens not 2");
+        }
+
+        // verify bond
+        assertEqDecimal(
+            beforeBalance - alice.balance,
+            BOND * 2,
+            18,
+            "didn't charge bond"
+        );
     }
 
     function test_stakeAndUnstake() public {

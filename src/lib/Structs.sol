@@ -38,3 +38,8 @@ struct IncentiveInfo {
     uint64 numberOfStakedTokens;
     uint64 lastUpdateTime;
 }
+
+struct StakeMultipleInput {
+    IncentiveKey key;
+    uint256 nftId;
+}

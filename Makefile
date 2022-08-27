@@ -9,7 +9,7 @@ update:; forge update
 # Build & test
 build  :; forge build
 test   :; forge test
-trace   :; forge test -vvv
+trace   :; forge test -vvv --gas-report
 clean  :; forge clean
 snapshot :; forge snapshot
 fmt    :; forge fmt && forge fmt tests/

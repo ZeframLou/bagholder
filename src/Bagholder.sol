@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0
 pragma solidity ^0.8.14;
 
+import {Multicall} from "openzeppelin/utils/Multicall.sol";
+
 import {ERC20} from "solmate/tokens/ERC20.sol";
 import {ERC721} from "solmate/tokens/ERC721.sol";
 import {SafeCastLib} from "solmate/utils/SafeCastLib.sol";
@@ -17,7 +19,7 @@ import {IncentiveId} from "./lib/IncentiveId.sol";
 /// precious NFTs leave their wallets.
 /// @dev Uses an optimistic staking model where if someone staked and then transferred
 /// their NFT elsewhere, someone else can slash them and receive the staker's bond.
-contract Bagholder {
+contract Bagholder is Multicall {
     /// -----------------------------------------------------------------------
     /// Library usage
     /// -----------------------------------------------------------------------

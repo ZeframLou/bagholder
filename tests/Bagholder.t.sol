@@ -60,32 +60,19 @@ contract BagholderTest is Test {
 
         // verify stakerInfo
         {
-            (
-                uint256 totalRewardUnclaimed,
-                uint128 rewardPerTokenStored,
-                uint64 numberOfStakedTokens
-            ) = bagholder.stakerInfos(incentiveId, alice);
-            assertEq(totalRewardUnclaimed, 0, "totalRewardUnclaimed not 0");
-            assertEq(rewardPerTokenStored, 0, "rewardPerTokenStored not 0");
+            (, , uint64 numberOfStakedTokens) = bagholder.stakerInfos(
+                incentiveId,
+                alice
+            );
             assertEq(numberOfStakedTokens, 1, "numberOfStakedTokens not 1");
         }
 
         // verify incentiveInfo
         {
-            (
-                uint256 rewardRatePerSecond,
-                uint128 rewardPerTokenStored,
-                uint64 numberOfStakedTokens,
-                uint64 lastUpdateTime
-            ) = bagholder.incentiveInfos(incentiveId);
-            assertEq(rewardRatePerSecond, INCENTIVE_AMOUNT / INCENTIVE_LENGTH);
-            assertEq(rewardPerTokenStored, 0, "rewardPerTokenStored not 0");
-            assertEq(numberOfStakedTokens, 1, "numberOfStakedTokens not 1");
-            assertEq(
-                lastUpdateTime,
-                block.timestamp,
-                "lastUpdateTime incorrect"
+            (, , uint64 numberOfStakedTokens, ) = bagholder.incentiveInfos(
+                incentiveId
             );
+            assertEq(numberOfStakedTokens, 1, "numberOfStakedTokens not 1");
         }
     }
 
@@ -105,32 +92,19 @@ contract BagholderTest is Test {
 
         // verify stakerInfo
         {
-            (
-                uint256 totalRewardUnclaimed,
-                uint128 rewardPerTokenStored,
-                uint64 numberOfStakedTokens
-            ) = bagholder.stakerInfos(incentiveId, alice);
-            assertEq(totalRewardUnclaimed, 0, "totalRewardUnclaimed not 0");
-            assertEq(rewardPerTokenStored, 0, "rewardPerTokenStored not 0");
+            (, , uint64 numberOfStakedTokens) = bagholder.stakerInfos(
+                incentiveId,
+                alice
+            );
             assertEq(numberOfStakedTokens, 0, "numberOfStakedTokens not 0");
         }
 
         // verify incentiveInfo
         {
-            (
-                uint256 rewardRatePerSecond,
-                uint128 rewardPerTokenStored,
-                uint64 numberOfStakedTokens,
-                uint64 lastUpdateTime
-            ) = bagholder.incentiveInfos(incentiveId);
-            assertEq(rewardRatePerSecond, INCENTIVE_AMOUNT / INCENTIVE_LENGTH);
-            assertEq(rewardPerTokenStored, 0, "rewardPerTokenStored not 0");
-            assertEq(numberOfStakedTokens, 0, "numberOfStakedTokens not 0");
-            assertEq(
-                lastUpdateTime,
-                block.timestamp,
-                "lastUpdateTime incorrect"
+            (, , uint64 numberOfStakedTokens, ) = bagholder.incentiveInfos(
+                incentiveId
             );
+            assertEq(numberOfStakedTokens, 0, "numberOfStakedTokens not 0");
         }
 
         // verify bond
@@ -160,32 +134,19 @@ contract BagholderTest is Test {
 
         // verify stakerInfo
         {
-            (
-                uint256 totalRewardUnclaimed,
-                uint128 rewardPerTokenStored,
-                uint64 numberOfStakedTokens
-            ) = bagholder.stakerInfos(incentiveId, alice);
-            assertEq(totalRewardUnclaimed, 0, "totalRewardUnclaimed not 0");
-            assertEq(rewardPerTokenStored, 0, "rewardPerTokenStored not 0");
+            (, , uint64 numberOfStakedTokens) = bagholder.stakerInfos(
+                incentiveId,
+                alice
+            );
             assertEq(numberOfStakedTokens, 0, "numberOfStakedTokens not 0");
         }
 
         // verify incentiveInfo
         {
-            (
-                uint256 rewardRatePerSecond,
-                uint128 rewardPerTokenStored,
-                uint64 numberOfStakedTokens,
-                uint64 lastUpdateTime
-            ) = bagholder.incentiveInfos(incentiveId);
-            assertEq(rewardRatePerSecond, INCENTIVE_AMOUNT / INCENTIVE_LENGTH);
-            assertEq(rewardPerTokenStored, 0, "rewardPerTokenStored not 0");
-            assertEq(numberOfStakedTokens, 0, "numberOfStakedTokens not 0");
-            assertEq(
-                lastUpdateTime,
-                block.timestamp,
-                "lastUpdateTime incorrect"
+            (, , uint64 numberOfStakedTokens, ) = bagholder.incentiveInfos(
+                incentiveId
             );
+            assertEq(numberOfStakedTokens, 0, "numberOfStakedTokens not 0");
         }
 
         // verify bond

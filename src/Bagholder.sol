@@ -8,9 +8,12 @@ import {ERC721} from "solmate/tokens/ERC721.sol";
 import {SafeCastLib} from "solmate/utils/SafeCastLib.sol";
 import {SafeTransferLib} from "solmate/utils/SafeTransferLib.sol";
 
+import {FullMath} from "v3-core/libraries/FullMath.sol";
+
+import {SelfPermit} from "v3-periphery/base/SelfPermit.sol";
+
 import "./lib/Math.sol";
 import "./lib/Structs.sol";
-import {FullMath} from "./lib/FullMath.sol";
 import {IncentiveId} from "./lib/IncentiveId.sol";
 
 /// @title Bagholder
@@ -19,7 +22,7 @@ import {IncentiveId} from "./lib/IncentiveId.sol";
 /// precious NFTs leave their wallets.
 /// @dev Uses an optimistic staking model where if someone staked and then transferred
 /// their NFT elsewhere, someone else can slash them and receive the staker's bond.
-contract Bagholder is Multicall {
+contract Bagholder is Multicall, SelfPermit {
     /// -----------------------------------------------------------------------
     /// Library usage
     /// -----------------------------------------------------------------------

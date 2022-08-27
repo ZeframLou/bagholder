@@ -54,6 +54,39 @@ contract Bagholder {
     error Bagholder__IncentiveAlreadyExists();
 
     /// -----------------------------------------------------------------------
+    /// Events
+    /// -----------------------------------------------------------------------
+
+    event Stake(
+        address indexed sender,
+        bytes32 indexed incentiveId,
+        uint256 indexed nftId
+    );
+    event Unstake(
+        address indexed sender,
+        bytes32 indexed incentiveId,
+        uint256 indexed nftId,
+        address bondRecipient
+    );
+    event SlashPaperHand(
+        address indexed sender,
+        bytes32 indexed incentiveId,
+        uint256 indexed nftId,
+        address bondRecipient
+    );
+    event CreateIncentive(
+        address indexed sender,
+        bytes32 indexed incentiveId,
+        IncentiveKey key,
+        uint256 rewardAmount
+    );
+    event ClaimRewards(
+        address indexed sender,
+        bytes32 indexed incentiveId,
+        address recipient
+    );
+
+    /// -----------------------------------------------------------------------
     /// Constants
     /// -----------------------------------------------------------------------
 
@@ -120,8 +153,11 @@ contract Bagholder {
         /// -----------------------------------------------------------------------
 
         // accrue rewards
-        (stakerInfo, incentiveInfo) =
-            _accrueRewards(key, stakerInfo, incentiveInfo);
+        (stakerInfo, incentiveInfo) = _accrueRewards(
+            key,
+            stakerInfo,
+            incentiveInfo
+        );
 
         // update stake state
         stakers[incentiveId][nftId] = staker;
@@ -133,6 +169,8 @@ contract Bagholder {
         // update incentive state
         incentiveInfo.numberOfStakedTokens += 1;
         incentiveInfos[incentiveId] = incentiveInfo;
+
+        emit Stake(msg.sender, incentiveId, nftId);
     }
 
     /// @notice Unstakes an NFT from an incentive and returns the ETH bond.
@@ -144,10 +182,7 @@ contract Bagholder {
         IncentiveKey calldata key,
         uint256 nftId,
         address bondRecipient
-    )
-        external
-        virtual
-    {
+    ) external virtual {
         /// -----------------------------------------------------------------------
         /// Validation
         /// -----------------------------------------------------------------------
@@ -176,8 +211,11 @@ contract Bagholder {
         /// -----------------------------------------------------------------------
 
         // accrue rewards
-        (stakerInfo, incentiveInfo) =
-            _accrueRewards(key, stakerInfo, incentiveInfo);
+        (stakerInfo, incentiveInfo) = _accrueRewards(
+            key,
+            stakerInfo,
+            incentiveInfo
+        );
 
         // update NFT state
         delete stakers[incentiveId][nftId];
@@ -196,6 +234,8 @@ contract Bagholder {
 
         // return bond to user
         bondRecipient.safeTransferETH(key.bondAmount);
+
+        emit Unstake(msg.sender, incentiveId, nftId, bondRecipient);
     }
 
     /// @notice Slashes a staker who has transferred the staked NFT to another address.
@@ -207,10 +247,7 @@ contract Bagholder {
         IncentiveKey calldata key,
         uint256 nftId,
         address bondRecipient
-    )
-        external
-        virtual
-    {
+    ) external virtual {
         /// -----------------------------------------------------------------------
         /// Validation
         /// -----------------------------------------------------------------------
@@ -235,8 +272,11 @@ contract Bagholder {
         /// -----------------------------------------------------------------------
 
         // accrue rewards
-        (stakerInfo, incentiveInfo) =
-            _accrueRewards(key, stakerInfo, incentiveInfo);
+        (stakerInfo, incentiveInfo) = _accrueRewards(
+            key,
+            stakerInfo,
+            incentiveInfo
+        );
 
         // update NFT state
         delete stakers[incentiveId][nftId];
@@ -255,6 +295,8 @@ contract Bagholder {
 
         // send bond to recipient as reward
         bondRecipient.safeTransferETH(key.bondAmount);
+
+        emit SlashPaperHand(msg.sender, incentiveId, nftId, bondRecipient);
     }
 
     /// @notice Creates an incentive and transfers the reward tokens from the caller.
@@ -278,12 +320,9 @@ contract Bagholder {
 
         // ensure incentive key is valid
         if (
-            address(key.nft)
-                == address(0)
-                || address(key.rewardToken)
-                == address(0)
-                || key.startTime
-                >= key.endTime
+            address(key.nft) == address(0) ||
+            address(key.rewardToken) == address(0) ||
+            key.startTime >= key.endTime
         ) {
             revert Bagholder__InvalidIncentiveKey();
         }
@@ -295,12 +334,10 @@ contract Bagholder {
         // create incentive info
         uint256 lastTimeRewardApplicable = min(block.timestamp, key.endTime);
         incentiveInfos[incentiveId] = IncentiveInfo({
-            rewardRatePerSecond: rewardAmount
-                / (key.endTime - key.startTime),
+            rewardRatePerSecond: rewardAmount / (key.endTime - key.startTime),
             rewardPerTokenStored: 0,
             numberOfStakedTokens: 0,
-            lastUpdateTime: lastTimeRewardApplicable
-                .safeCastTo64()
+            lastUpdateTime: lastTimeRewardApplicable.safeCastTo64()
         });
 
         /// -----------------------------------------------------------------------
@@ -309,8 +346,12 @@ contract Bagholder {
 
         // transfer reward tokens from sender
         key.rewardToken.safeTransferFrom(
-            msg.sender, address(this), rewardAmount
+            msg.sender,
+            address(this),
+            rewardAmount
         );
+
+        emit CreateIncentive(msg.sender, incentiveId, key, rewardAmount);
     }
 
     /// @notice Claims the reward tokens the caller has earned from a particular incentive.
@@ -336,8 +377,11 @@ contract Bagholder {
         /// -----------------------------------------------------------------------
 
         // accrue rewards
-        (stakerInfo, incentiveInfo) =
-            _accrueRewards(key, stakerInfo, incentiveInfo);
+        (stakerInfo, incentiveInfo) = _accrueRewards(
+            key,
+            stakerInfo,
+            incentiveInfo
+        );
 
         // update staker state
         rewardAmount = stakerInfo.totalRewardUnclaimed;
@@ -352,7 +396,13 @@ contract Bagholder {
         /// -----------------------------------------------------------------------
 
         // transfer reward to user
-        key.rewardToken.safeTransferFrom(address(this), recipient, rewardAmount);
+        key.rewardToken.safeTransferFrom(
+            address(this),
+            recipient,
+            rewardAmount
+        );
+
+        emit ClaimRewards(msg.sender, incentiveId, recipient);
     }
 
     /// -----------------------------------------------------------------------
@@ -368,9 +418,11 @@ contract Bagholder {
         returns (uint256)
     {
         uint256 lastTimeRewardApplicable = min(block.timestamp, key.endTime);
-        return _rewardPerToken(
-            incentiveInfos[key.compute()], lastTimeRewardApplicable
-        );
+        return
+            _rewardPerToken(
+                incentiveInfos[key.compute()],
+                lastTimeRewardApplicable
+            );
     }
 
     /// @notice Computes the amount of reward tokens a staker has accrued
@@ -386,10 +438,14 @@ contract Bagholder {
         bytes32 incentiveId = key.compute();
         uint256 lastTimeRewardApplicable = min(block.timestamp, key.endTime);
         StakerInfo memory info = stakerInfos[incentiveId][staker];
-        return _earned(
-            info,
-            _rewardPerToken(incentiveInfos[key.compute()], lastTimeRewardApplicable)
-        );
+        return
+            _earned(
+                info,
+                _rewardPerToken(
+                    incentiveInfos[key.compute()],
+                    lastTimeRewardApplicable
+                )
+            );
     }
 
     /// -----------------------------------------------------------------------
@@ -399,16 +455,12 @@ contract Bagholder {
     function _rewardPerToken(
         IncentiveInfo memory info,
         uint256 lastTimeRewardApplicable
-    )
-        internal
-        pure
-        returns (uint256)
-    {
+    ) internal pure returns (uint256) {
         if (info.numberOfStakedTokens == 0) {
             return info.rewardPerTokenStored;
         }
-        return info.rewardPerTokenStored
-            +
+        return
+            info.rewardPerTokenStored +
             FullMath.mulDiv(
                 (lastTimeRewardApplicable - info.lastUpdateTime) * PRECISION,
                 info.rewardRatePerSecond,
@@ -426,22 +478,19 @@ contract Bagholder {
                 info.numberOfStakedTokens,
                 rewardPerToken_ - info.rewardPerTokenStored,
                 PRECISION
-            )
-            + info.totalRewardUnclaimed;
+            ) + info.totalRewardUnclaimed;
     }
 
     function _accrueRewards(
         IncentiveKey calldata key,
         StakerInfo memory stakerInfo,
         IncentiveInfo memory incentiveInfo
-    )
-        internal
-        view
-        returns (StakerInfo memory, IncentiveInfo memory)
-    {
+    ) internal view returns (StakerInfo memory, IncentiveInfo memory) {
         uint256 lastTimeRewardApplicable = min(block.timestamp, key.endTime);
-        uint256 rewardPerToken_ =
-            _rewardPerToken(incentiveInfo, lastTimeRewardApplicable);
+        uint256 rewardPerToken_ = _rewardPerToken(
+            incentiveInfo,
+            lastTimeRewardApplicable
+        );
 
         incentiveInfo.rewardPerTokenStored = rewardPerToken_.safeCastTo128();
         incentiveInfo.lastUpdateTime = lastTimeRewardApplicable.safeCastTo64();

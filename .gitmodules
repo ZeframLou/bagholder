@@ -11,3 +11,6 @@
 	path = lib/v3-periphery
 	url = https://github.com/uniswap/v3-periphery
 	branch = 0.8
+[submodule "lib/v3-core"]
+	path = lib/v3-core
+	url = https://github.com/uniswap/v3-core

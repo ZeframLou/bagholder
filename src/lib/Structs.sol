@@ -22,8 +22,8 @@ struct IncentiveKey {
 /// @param rewardPerTokenStored the rewardPerToken value when the staker info was last updated
 /// @param numberOfStakedTokens the number of NFTs staked by the staker in the specified incentive
 struct StakerInfo {
-    uint256 totalRewardUnclaimed;
-    uint128 rewardPerTokenStored;
+    uint256 rewardPerTokenStored;
+    uint192 totalRewardUnclaimed;
     uint64 numberOfStakedTokens;
 }
 
@@ -33,8 +33,8 @@ struct StakerInfo {
 /// @param lastUpdateTime the Unix timestamp (in seconds) when the incentive info was last updated,
 /// or the incentive's endTime if the time of the last update was after endTime
 struct IncentiveInfo {
-    uint256 rewardRatePerSecond;
-    uint128 rewardPerTokenStored;
+    uint256 rewardPerTokenStored;
+    uint128 rewardRatePerSecond;
     uint64 numberOfStakedTokens;
     uint64 lastUpdateTime;
 }

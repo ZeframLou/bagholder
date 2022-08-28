@@ -535,7 +535,8 @@ contract Bagholder is Multicall, SelfPermit {
         // create incentive info
         uint256 lastTimeRewardApplicable = min(block.timestamp, key.endTime);
         incentiveInfos[incentiveId] = IncentiveInfo({
-            rewardRatePerSecond: rewardAmount / (key.endTime - key.startTime),
+            rewardRatePerSecond: (rewardAmount / (key.endTime - key.startTime))
+                .safeCastTo128(),
             rewardPerTokenStored: 0,
             numberOfStakedTokens: 0,
             lastUpdateTime: lastTimeRewardApplicable.safeCastTo64()
@@ -693,10 +694,11 @@ contract Bagholder is Multicall, SelfPermit {
             lastTimeRewardApplicable
         );
 
-        incentiveInfo.rewardPerTokenStored = rewardPerToken_.safeCastTo128();
+        incentiveInfo.rewardPerTokenStored = rewardPerToken_;
         incentiveInfo.lastUpdateTime = lastTimeRewardApplicable.safeCastTo64();
-        stakerInfo.totalRewardUnclaimed = _earned(stakerInfo, rewardPerToken_);
-        stakerInfo.rewardPerTokenStored = rewardPerToken_.safeCastTo128();
+        stakerInfo.totalRewardUnclaimed = _earned(stakerInfo, rewardPerToken_)
+            .safeCastTo192();
+        stakerInfo.rewardPerTokenStored = rewardPerToken_;
 
         return (stakerInfo, incentiveInfo);
     }

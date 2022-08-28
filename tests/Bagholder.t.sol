@@ -210,4 +210,78 @@ contract BagholderTest is Test {
         // verify bond
         assertEqDecimal(bob.balance, BOND, 18, "didn't receive bond");
     }
+
+    function test_restake() public {
+        // setup incentive
+        IncentiveKey memory k = IncentiveKey({
+            nft: nft,
+            rewardToken: token,
+            startTime: block.timestamp,
+            endTime: block.timestamp + INCENTIVE_LENGTH,
+            bondAmount: BOND / 2
+        });
+        token.mint(address(this), INCENTIVE_AMOUNT);
+        bagholder.createIncentive(k, INCENTIVE_AMOUNT);
+
+        startHoax(alice);
+        bagholder.stake{value: BOND}(key, 1);
+        bagholder.restake(key, 1, k, 2, bob);
+
+        // verify staker
+        assertEq(
+            bagholder.stakers(key.compute(), 1),
+            address(0),
+            "staker incorrect"
+        );
+        assertEq(bagholder.stakers(k.compute(), 2), alice, "staker incorrect");
+
+        // verify stakerInfo
+        {
+            (, , uint64 numberOfStakedTokens) = bagholder.stakerInfos(
+                key.compute(),
+                alice
+            );
+            assertEq(
+                numberOfStakedTokens,
+                0,
+                "unstaker numberOfStakedTokens not 0"
+            );
+        }
+        {
+            (, , uint64 numberOfStakedTokens) = bagholder.stakerInfos(
+                k.compute(),
+                alice
+            );
+            assertEq(
+                numberOfStakedTokens,
+                1,
+                "staker numberOfStakedTokens not 1"
+            );
+        }
+
+        // verify incentiveInfo
+        {
+            (, , uint64 numberOfStakedTokens, ) = bagholder.incentiveInfos(
+                key.compute()
+            );
+            assertEq(
+                numberOfStakedTokens,
+                0,
+                "unstake incentive numberOfStakedTokens not 0"
+            );
+        }
+        {
+            (, , uint64 numberOfStakedTokens, ) = bagholder.incentiveInfos(
+                k.compute()
+            );
+            assertEq(
+                numberOfStakedTokens,
+                1,
+                "stake incentive numberOfStakedTokens not 1"
+            );
+        }
+
+        // verify bond
+        assertEqDecimal(bob.balance, BOND / 2, 18, "didn't receive bond");
+    }
 }

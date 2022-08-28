@@ -312,6 +312,133 @@ contract Bagholder is Multicall, SelfPermit {
         emit Unstake(msg.sender, incentiveId, nftId, bondRecipient);
     }
 
+    /// @notice Unstaked an NFT from an incentive, then use the bond to stake an NFT into another incentive.
+    /// Must be called by the owner of the unstaked NFT. The bond amount of the incentive to unstake from must be at least
+    /// that of the incentive to stake in, with any extra bond sent to the specified recipient.
+    /// @param unstakeKey the key of the incentive to unstake from
+    /// @param unstakeNftId the ID of the NFT to unstake
+    /// @param stakeKey the key of the incentive to stake into
+    /// @param stakeNftId the ID of the NFT to stake
+    /// @param bondRecipient the recipient of any extra bond
+    function restake(
+        IncentiveKey calldata unstakeKey,
+        uint256 unstakeNftId,
+        IncentiveKey calldata stakeKey,
+        uint256 stakeNftId,
+        address bondRecipient
+    ) external virtual {
+        /// -----------------------------------------------------------------------
+        /// Validation
+        /// -----------------------------------------------------------------------
+
+        bytes32 unstakeIncentiveId = unstakeKey.compute();
+        bytes32 stakeIncentiveId = stakeKey.compute();
+
+        // check the NFT is currently being staked in the unstake incentive
+        if (stakers[unstakeIncentiveId][unstakeNftId] != msg.sender) {
+            revert Bagholder__NotStaked();
+        }
+
+        // check msg.sender owns the unstaked NFT
+        if (unstakeKey.nft.ownerOf(unstakeNftId) != msg.sender) {
+            revert Bagholder__NotNftOwner();
+        }
+
+        // check there's enough bond
+        if (unstakeKey.bondAmount < stakeKey.bondAmount) {
+            revert Bagholder__BondIncorrect();
+        }
+
+        // check the staked NFT is not currently being staked in the stake incentive
+        if (stakers[stakeIncentiveId][stakeNftId] != address(0)) {
+            revert Bagholder__AlreadyStaked();
+        }
+
+        /// -----------------------------------------------------------------------
+        /// Storage loads (Unstake)
+        /// -----------------------------------------------------------------------
+
+        StakerInfo memory stakerInfo = stakerInfos[unstakeIncentiveId][
+            msg.sender
+        ];
+        IncentiveInfo memory incentiveInfo = incentiveInfos[unstakeIncentiveId];
+
+        /// -----------------------------------------------------------------------
+        /// State updates (Unstake)
+        /// -----------------------------------------------------------------------
+
+        // accrue rewards
+        (stakerInfo, incentiveInfo) = _accrueRewards(
+            unstakeKey,
+            stakerInfo,
+            incentiveInfo
+        );
+
+        // update NFT state
+        delete stakers[unstakeIncentiveId][unstakeNftId];
+
+        // update staker state
+        stakerInfo.numberOfStakedTokens -= 1;
+        stakerInfos[unstakeIncentiveId][msg.sender] = stakerInfo;
+
+        // update incentive state
+        incentiveInfo.numberOfStakedTokens -= 1;
+        incentiveInfos[unstakeIncentiveId] = incentiveInfo;
+
+        emit Unstake(
+            msg.sender,
+            unstakeIncentiveId,
+            unstakeNftId,
+            bondRecipient
+        );
+
+        /// -----------------------------------------------------------------------
+        /// Storage loads (Stake)
+        /// -----------------------------------------------------------------------
+
+        address staker = stakeKey.nft.ownerOf(stakeNftId);
+        stakerInfo = stakerInfos[stakeIncentiveId][staker];
+        incentiveInfo = incentiveInfos[stakeIncentiveId];
+
+        /// -----------------------------------------------------------------------
+        /// State updates (Stake)
+        /// -----------------------------------------------------------------------
+
+        // accrue rewards
+        (stakerInfo, incentiveInfo) = _accrueRewards(
+            stakeKey,
+            stakerInfo,
+            incentiveInfo
+        );
+
+        // update stake state
+        stakers[stakeIncentiveId][stakeNftId] = staker;
+
+        // update staker state
+        stakerInfo.numberOfStakedTokens += 1;
+        stakerInfos[stakeIncentiveId][staker] = stakerInfo;
+
+        // update incentive state
+        incentiveInfo.numberOfStakedTokens += 1;
+        incentiveInfos[stakeIncentiveId] = incentiveInfo;
+
+        emit Stake(staker, stakeIncentiveId, stakeNftId);
+
+        /// -----------------------------------------------------------------------
+        /// External calls
+        /// -----------------------------------------------------------------------
+
+        if (unstakeKey.bondAmount != stakeKey.bondAmount) {
+            unchecked {
+                // return extra bond to user
+                // already checked unstakeKey.bondAmount > stakeKey.bondAmount
+                bondRecipient.safeTransferETH(
+                    unstakeKey.bondAmount - stakeKey.bondAmount
+                );
+            }
+        }
+    }
+
     /// @notice Slashes a staker who has transferred the staked NFT to another address.
     /// The bond is given to the slasher as reward.
     /// @param key the incentive's key

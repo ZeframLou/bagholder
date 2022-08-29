@@ -55,6 +55,12 @@ contract Bagholder is Multicall, SelfPermit {
     /// @notice Thrown when creating an incentive using invalid parameters (e.g. start time is after end time)
     error Bagholder__InvalidIncentiveKey();
 
+    /// @notice Thrown when staking into an incentive that doesn't exist
+    error Bagholder__IncentiveNonexistent();
+
+    /// @notice Thrown when creating an incentive with a zero reward rate
+    error Bagholder__RewardAmountTooSmall();
+
     /// @notice Thrown when creating an incentive that already exists
     error Bagholder__IncentiveAlreadyExists();
 
@@ -130,10 +136,17 @@ contract Bagholder is Multicall, SelfPermit {
         virtual
     {
         /// -----------------------------------------------------------------------
-        /// Validation
+        /// Storage loads
         /// -----------------------------------------------------------------------
 
         bytes32 incentiveId = key.compute();
+        address staker = key.nft.ownerOf(nftId);
+        StakerInfo memory stakerInfo = stakerInfos[incentiveId][staker];
+        IncentiveInfo memory incentiveInfo = incentiveInfos[incentiveId];
+
+        /// -----------------------------------------------------------------------
+        /// Validation
+        /// -----------------------------------------------------------------------
 
         // check bond is correct
         if (msg.value != key.bondAmount) {
@@ -145,13 +158,10 @@ contract Bagholder is Multicall, SelfPermit {
             revert Bagholder__AlreadyStaked();
         }
 
-        /// -----------------------------------------------------------------------
-        /// Storage loads
-        /// -----------------------------------------------------------------------
-
-        address staker = key.nft.ownerOf(nftId);
-        StakerInfo memory stakerInfo = stakerInfos[incentiveId][staker];
-        IncentiveInfo memory incentiveInfo = incentiveInfos[incentiveId];
+        // ensure the incentive exists
+        if (incentiveInfo.rewardRatePerSecond == 0) {
+            revert Bagholder__IncentiveNonexistent();
+        }
 
         /// -----------------------------------------------------------------------
         /// State updates
@@ -192,24 +202,28 @@ contract Bagholder is Multicall, SelfPermit {
         uint256 totalBondRequired;
         for (uint256 i; i < numInputs; ) {
             /// -----------------------------------------------------------------------
-            /// Validation
+            /// Storage loads
             /// -----------------------------------------------------------------------
 
             bytes32 incentiveId = inputs[i].key.compute();
             uint256 nftId = inputs[i].nftId;
+            address staker = inputs[i].key.nft.ownerOf(nftId);
+            StakerInfo memory stakerInfo = stakerInfos[incentiveId][staker];
+            IncentiveInfo memory incentiveInfo = incentiveInfos[incentiveId];
+
+            /// -----------------------------------------------------------------------
+            /// Validation
+            /// -----------------------------------------------------------------------
 
             // check the NFT is not currently being staked in this incentive
             if (stakers[incentiveId][nftId] != address(0)) {
                 revert Bagholder__AlreadyStaked();
             }
 
-            /// -----------------------------------------------------------------------
-            /// Storage loads
-            /// -----------------------------------------------------------------------
-
-            address staker = inputs[i].key.nft.ownerOf(nftId);
-            StakerInfo memory stakerInfo = stakerInfos[incentiveId][staker];
-            IncentiveInfo memory incentiveInfo = incentiveInfos[incentiveId];
+            // ensure the incentive exists
+            if (incentiveInfo.rewardRatePerSecond == 0) {
+                revert Bagholder__IncentiveNonexistent();
+            }
 
             /// -----------------------------------------------------------------------
             /// State updates
@@ -400,6 +414,11 @@ contract Bagholder is Multicall, SelfPermit {
         stakerInfo = stakerInfos[stakeIncentiveId][staker];
         incentiveInfo = incentiveInfos[stakeIncentiveId];
 
+        // ensure the incentive exists
+        if (incentiveInfo.rewardRatePerSecond == 0) {
+            revert Bagholder__IncentiveNonexistent();
+        }
+
         /// -----------------------------------------------------------------------
         /// State updates (Stake)
         /// -----------------------------------------------------------------------
@@ -523,9 +542,17 @@ contract Bagholder is Multicall, SelfPermit {
         if (
             address(key.nft) == address(0) ||
             address(key.rewardToken) == address(0) ||
-            key.startTime >= key.endTime
+            key.startTime >= key.endTime ||
+            key.endTime < block.timestamp
         ) {
             revert Bagholder__InvalidIncentiveKey();
+        }
+
+        // ensure incentive amount makes sense
+        uint128 rewardRatePerSecond = (rewardAmount /
+            (key.endTime - key.startTime)).safeCastTo128();
+        if (rewardRatePerSecond == 0) {
+            revert Bagholder__RewardAmountTooSmall();
         }
 
         /// -----------------------------------------------------------------------
@@ -533,13 +560,11 @@ contract Bagholder is Multicall, SelfPermit {
         /// -----------------------------------------------------------------------
 
         // create incentive info
-        uint256 lastTimeRewardApplicable = min(block.timestamp, key.endTime);
         incentiveInfos[incentiveId] = IncentiveInfo({
-            rewardRatePerSecond: (rewardAmount / (key.endTime - key.startTime))
-                .safeCastTo128(),
+            rewardRatePerSecond: rewardRatePerSecond,
             rewardPerTokenStored: 0,
             numberOfStakedTokens: 0,
-            lastUpdateTime: lastTimeRewardApplicable.safeCastTo64()
+            lastUpdateTime: block.timestamp.safeCastTo64()
         });
 
         /// -----------------------------------------------------------------------

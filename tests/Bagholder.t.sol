@@ -292,6 +292,8 @@ contract BagholderTest is Test {
     function test_stakeAndWait() public {
         startHoax(alice);
         bagholder.stake{value: BOND}(key, 1);
+
+        // skip 1/3 of the incentive time
         skip(INCENTIVE_LENGTH / 3);
 
         // verify reward amount
@@ -300,6 +302,28 @@ contract BagholderTest is Test {
             INCENTIVE_AMOUNT / 3,
             1e9,
             "reward amount incorrect"
+        );
+
+        // skip to the end of the incentive
+        skip(INCENTIVE_LENGTH * 2 / 3);
+
+        // verify reward amount
+        assertApproxEqRel(
+            bagholder.earned(key, alice),
+            INCENTIVE_AMOUNT,
+            1e9,
+            "reward amount incorrect"
+        );
+
+        // skip to 2x the incentive time
+        skip(INCENTIVE_LENGTH);
+
+        // verify reward amount
+        assertApproxEqRel(
+            bagholder.earned(key, alice),
+            INCENTIVE_AMOUNT,
+            1e9,
+            "still earning reward after incentive end"
         );
     }
 
@@ -401,5 +425,89 @@ contract BagholderTest is Test {
         bagholder.stake{value: BOND}(key, 1);
         nft.safeTransferFrom(alice, bob, 1);
         bagholder.unstake(key, 1, alice);
+    }
+
+    function testFail_stakeInNonexistentIncentive() public {
+        IncentiveKey memory k = IncentiveKey({
+            nft: nft,
+            rewardToken: token,
+            startTime: block.timestamp,
+            endTime: block.timestamp + INCENTIVE_LENGTH,
+            bondAmount: BOND / 2
+        });
+
+        startHoax(alice);
+        bagholder.stake{value: BOND / 2}(k, 1);
+    }
+
+    function testFail_stakeMultipleInNonexistentIncentive() public {
+        IncentiveKey memory k = IncentiveKey({
+            nft: nft,
+            rewardToken: token,
+            startTime: block.timestamp,
+            endTime: block.timestamp + INCENTIVE_LENGTH,
+            bondAmount: BOND / 2
+        });
+
+        startHoax(alice);
+        StakeMultipleInput[] memory inputs = new StakeMultipleInput[](2);
+        inputs[0].key = key;
+        inputs[0].nftId = 1;
+        inputs[1].key = k;
+        inputs[1].nftId = 2;
+        bagholder.stakeMultiple{value: (BOND * 3) / 2}(inputs);
+    }
+
+    function testFail_restakeInNonexistentIncentive() public {
+        IncentiveKey memory k = IncentiveKey({
+            nft: nft,
+            rewardToken: token,
+            startTime: block.timestamp,
+            endTime: block.timestamp + INCENTIVE_LENGTH,
+            bondAmount: BOND / 2
+        });
+
+        startHoax(alice);
+        bagholder.stake{value: BOND}(key, 1);
+        bagholder.restake(key, 1, k, 2, bob);
+    }
+
+    function testFail_unstakeFromNonexistentIncentive() public {
+        IncentiveKey memory k = IncentiveKey({
+            nft: nft,
+            rewardToken: token,
+            startTime: block.timestamp,
+            endTime: block.timestamp + INCENTIVE_LENGTH,
+            bondAmount: BOND / 2
+        });
+
+        startHoax(alice);
+        bagholder.stake{value: BOND}(key, 1);
+        bagholder.unstake(k, 1, alice);
+    }
+
+    function testFail_createIncentiveWithZeroReward() public {
+        IncentiveKey memory k = IncentiveKey({
+            nft: nft,
+            rewardToken: token,
+            startTime: block.timestamp,
+            endTime: block.timestamp + INCENTIVE_LENGTH,
+            bondAmount: BOND / 2
+        });
+
+        bagholder.createIncentive(k, 0);
+    }
+
+    function testFail_createDuplicateIncentive() public {
+        token.mint(address(this), INCENTIVE_AMOUNT);
+        bagholder.createIncentive(key, INCENTIVE_AMOUNT);
+    }
+
+    function testFail_slashNonPaperHand() public {
+        hoax(alice);
+        bagholder.stake{value: BOND}(key, 1);
+
+        hoax(bob);
+        bagholder.slashPaperHand(key, 1, bob);
     }
 }

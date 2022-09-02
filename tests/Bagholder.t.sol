@@ -328,6 +328,24 @@ contract BagholderTest is Test {
             1e9,
             "still earning reward after incentive end"
         );
+
+        // claim rewards
+        uint256 beforeBalance = token.balanceOf(alice);
+        uint256 rewardAmount = bagholder.claimRewards(key, alice);
+
+        // verify reward amount
+        assertApproxEqRel(
+            rewardAmount,
+            INCENTIVE_AMOUNT,
+            1e9,
+            "claimed reward incorrect"
+        );
+        assertApproxEqRel(
+            token.balanceOf(alice) - beforeBalance,
+            INCENTIVE_AMOUNT,
+            1e9,
+            "actual claimed reward incorrect"
+        );
     }
 
     function test_twoStakersAndWait() public {
@@ -452,6 +470,42 @@ contract BagholderTest is Test {
         );
     }
 
+    function test_claimRefund() public {
+        startHoax(alice);
+        skip(INCENTIVE_LENGTH / 3);
+        bagholder.stake{value: BOND}(key, 1);
+        skip(INCENTIVE_LENGTH / 3);
+        bagholder.unstake(key, 1, alice);
+        skip(INCENTIVE_LENGTH / 3);
+
+        // claim refund
+        uint256 refundAmount = bagholder.claimRefund(key);
+
+        // verify refund amount
+        assertApproxEqRel(
+            refundAmount,
+            (INCENTIVE_AMOUNT * 2) / 3,
+            MAX_ERROR_PERCENT,
+            "refund amount incorrect"
+        );
+    }
+
+    function test_claimRefundNoStakes() public {
+        // skip the incentive period without any staking
+        skip(INCENTIVE_LENGTH);
+
+        // claim refund
+        uint256 refundAmount = bagholder.claimRefund(key);
+
+        // verify refund amount
+        assertApproxEqRel(
+            refundAmount,
+            INCENTIVE_AMOUNT,
+            MAX_ERROR_PERCENT,
+            "refund amount incorrect"
+        );
+    }
+
     function testFail_stakeAndTransferAndUnstake() public {
         startHoax(alice);
         bagholder.stake{value: BOND}(key, 1);
@@ -520,6 +574,22 @@ contract BagholderTest is Test {
         startHoax(alice);
         bagholder.stake{value: BOND}(key, 1);
         bagholder.unstake(k, 1, alice);
+    }
+
+    function testFail_claimRewardsFromNonexistentIncentive() public {
+        IncentiveKey memory k = IncentiveKey({
+            nft: nft,
+            rewardToken: token,
+            startTime: block.timestamp,
+            endTime: block.timestamp + INCENTIVE_LENGTH,
+            bondAmount: BOND / 2,
+            refundRecipient: refundRecipient
+        });
+
+        startHoax(alice);
+        bagholder.stake{value: BOND}(key, 1);
+        skip(INCENTIVE_LENGTH);
+        bagholder.claimRewards(k, alice);
     }
 
     function testFail_createIncentiveWithZeroReward() public {

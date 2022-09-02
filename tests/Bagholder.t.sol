@@ -23,6 +23,7 @@ contract BagholderTest is Test {
     uint256 constant MAX_ERROR_PERCENT = 1e9; // 10**-9
     address alice = makeAddr("Alice");
     address bob = makeAddr("Bob");
+    address refundRecipient = makeAddr("Refund Recipient");
 
     function setUp() public {
         // deploy Bagholder
@@ -40,7 +41,8 @@ contract BagholderTest is Test {
             rewardToken: token,
             startTime: block.timestamp,
             endTime: block.timestamp + INCENTIVE_LENGTH,
-            bondAmount: BOND
+            bondAmount: BOND,
+            refundRecipient: refundRecipient
         });
         token.mint(address(this), INCENTIVE_AMOUNT);
         token.approve(address(bagholder), type(uint256).max);
@@ -73,7 +75,7 @@ contract BagholderTest is Test {
 
         // verify incentiveInfo
         {
-            (, , uint64 numberOfStakedTokens, ) = bagholder.incentiveInfos(
+            (, , uint64 numberOfStakedTokens, , ) = bagholder.incentiveInfos(
                 incentiveId
             );
             assertEq(numberOfStakedTokens, 1, "numberOfStakedTokens not 1");
@@ -122,7 +124,7 @@ contract BagholderTest is Test {
 
         // verify incentiveInfo
         {
-            (, , uint64 numberOfStakedTokens, ) = bagholder.incentiveInfos(
+            (, , uint64 numberOfStakedTokens, , ) = bagholder.incentiveInfos(
                 incentiveId
             );
             assertEq(numberOfStakedTokens, 2, "numberOfStakedTokens not 2");
@@ -162,7 +164,7 @@ contract BagholderTest is Test {
 
         // verify incentiveInfo
         {
-            (, , uint64 numberOfStakedTokens, ) = bagholder.incentiveInfos(
+            (, , uint64 numberOfStakedTokens, , ) = bagholder.incentiveInfos(
                 incentiveId
             );
             assertEq(numberOfStakedTokens, 0, "numberOfStakedTokens not 0");
@@ -204,7 +206,7 @@ contract BagholderTest is Test {
 
         // verify incentiveInfo
         {
-            (, , uint64 numberOfStakedTokens, ) = bagholder.incentiveInfos(
+            (, , uint64 numberOfStakedTokens, , ) = bagholder.incentiveInfos(
                 incentiveId
             );
             assertEq(numberOfStakedTokens, 0, "numberOfStakedTokens not 0");
@@ -221,7 +223,8 @@ contract BagholderTest is Test {
             rewardToken: token,
             startTime: block.timestamp,
             endTime: block.timestamp + INCENTIVE_LENGTH,
-            bondAmount: BOND / 2
+            bondAmount: BOND / 2,
+            refundRecipient: refundRecipient
         });
         token.mint(address(this), INCENTIVE_AMOUNT);
         bagholder.createIncentive(k, INCENTIVE_AMOUNT);
@@ -265,7 +268,7 @@ contract BagholderTest is Test {
 
         // verify incentiveInfo
         {
-            (, , uint64 numberOfStakedTokens, ) = bagholder.incentiveInfos(
+            (, , uint64 numberOfStakedTokens, , ) = bagholder.incentiveInfos(
                 key.compute()
             );
             assertEq(
@@ -275,7 +278,7 @@ contract BagholderTest is Test {
             );
         }
         {
-            (, , uint64 numberOfStakedTokens, ) = bagholder.incentiveInfos(
+            (, , uint64 numberOfStakedTokens, , ) = bagholder.incentiveInfos(
                 k.compute()
             );
             assertEq(
@@ -305,7 +308,7 @@ contract BagholderTest is Test {
         );
 
         // skip to the end of the incentive
-        skip(INCENTIVE_LENGTH * 2 / 3);
+        skip((INCENTIVE_LENGTH * 2) / 3);
 
         // verify reward amount
         assertApproxEqRel(
@@ -361,7 +364,8 @@ contract BagholderTest is Test {
             rewardToken: token,
             startTime: block.timestamp,
             endTime: block.timestamp + INCENTIVE_LENGTH,
-            bondAmount: BOND / 2
+            bondAmount: BOND / 2,
+            refundRecipient: refundRecipient
         });
         token.mint(address(this), INCENTIVE_AMOUNT);
         bagholder.createIncentive(k, INCENTIVE_AMOUNT);
@@ -418,6 +422,34 @@ contract BagholderTest is Test {
             MAX_ERROR_PERCENT,
             "bob reward amount incorrect"
         );
+
+        // claim refund
+        uint256 refundAmount = bagholder.claimRefund(key);
+
+        // verify refund amount
+        assertApproxEqRel(
+            refundAmount,
+            INCENTIVE_AMOUNT / 4,
+            MAX_ERROR_PERCENT,
+            "refund amount incorrect"
+        );
+        assertEqDecimal(
+            token.balanceOf(refundRecipient),
+            refundAmount,
+            18,
+            "didn't receive refund"
+        );
+
+        // try claiming refund again
+        refundAmount = bagholder.claimRefund(key);
+
+        // verify refund amount
+        assertApproxEqRel(
+            refundAmount,
+            0,
+            MAX_ERROR_PERCENT,
+            "second refund amount incorrect"
+        );
     }
 
     function testFail_stakeAndTransferAndUnstake() public {
@@ -433,7 +465,8 @@ contract BagholderTest is Test {
             rewardToken: token,
             startTime: block.timestamp,
             endTime: block.timestamp + INCENTIVE_LENGTH,
-            bondAmount: BOND / 2
+            bondAmount: BOND / 2,
+            refundRecipient: refundRecipient
         });
 
         startHoax(alice);
@@ -446,7 +479,8 @@ contract BagholderTest is Test {
             rewardToken: token,
             startTime: block.timestamp,
             endTime: block.timestamp + INCENTIVE_LENGTH,
-            bondAmount: BOND / 2
+            bondAmount: BOND / 2,
+            refundRecipient: refundRecipient
         });
 
         startHoax(alice);
@@ -464,7 +498,8 @@ contract BagholderTest is Test {
             rewardToken: token,
             startTime: block.timestamp,
             endTime: block.timestamp + INCENTIVE_LENGTH,
-            bondAmount: BOND / 2
+            bondAmount: BOND / 2,
+            refundRecipient: refundRecipient
         });
 
         startHoax(alice);
@@ -478,7 +513,8 @@ contract BagholderTest is Test {
             rewardToken: token,
             startTime: block.timestamp,
             endTime: block.timestamp + INCENTIVE_LENGTH,
-            bondAmount: BOND / 2
+            bondAmount: BOND / 2,
+            refundRecipient: refundRecipient
         });
 
         startHoax(alice);
@@ -492,7 +528,8 @@ contract BagholderTest is Test {
             rewardToken: token,
             startTime: block.timestamp,
             endTime: block.timestamp + INCENTIVE_LENGTH,
-            bondAmount: BOND / 2
+            bondAmount: BOND / 2,
+            refundRecipient: refundRecipient
         });
 
         bagholder.createIncentive(k, 0);

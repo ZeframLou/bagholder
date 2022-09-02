@@ -96,6 +96,11 @@ contract Bagholder is Multicall, SelfPermit {
         bytes32 indexed incentiveId,
         address recipient
     );
+    event ClaimRefund(
+        address indexed sender,
+        bytes32 indexed incentiveId,
+        uint256 refundAmount
+    );
 
     /// -----------------------------------------------------------------------
     /// Constants
@@ -159,7 +164,7 @@ contract Bagholder is Multicall, SelfPermit {
         }
 
         // ensure the incentive exists
-        if (incentiveInfo.rewardRatePerSecond == 0) {
+        if (incentiveInfo.lastUpdateTime == 0) {
             revert Bagholder__IncentiveNonexistent();
         }
 
@@ -221,7 +226,7 @@ contract Bagholder is Multicall, SelfPermit {
             }
 
             // ensure the incentive exists
-            if (incentiveInfo.rewardRatePerSecond == 0) {
+            if (incentiveInfo.lastUpdateTime == 0) {
                 revert Bagholder__IncentiveNonexistent();
             }
 
@@ -415,7 +420,7 @@ contract Bagholder is Multicall, SelfPermit {
         incentiveInfo = incentiveInfos[stakeIncentiveId];
 
         // ensure the incentive exists
-        if (incentiveInfo.rewardRatePerSecond == 0) {
+        if (incentiveInfo.lastUpdateTime == 0) {
             revert Bagholder__IncentiveNonexistent();
         }
 
@@ -564,7 +569,8 @@ contract Bagholder is Multicall, SelfPermit {
             rewardRatePerSecond: rewardRatePerSecond,
             rewardPerTokenStored: 0,
             numberOfStakedTokens: 0,
-            lastUpdateTime: block.timestamp.safeCastTo64()
+            lastUpdateTime: block.timestamp.safeCastTo64(),
+            accruedRefund: 0
         });
 
         /// -----------------------------------------------------------------------
@@ -599,6 +605,11 @@ contract Bagholder is Multicall, SelfPermit {
         StakerInfo memory stakerInfo = stakerInfos[incentiveId][msg.sender];
         IncentiveInfo memory incentiveInfo = incentiveInfos[incentiveId];
 
+        // ensure the incentive exists
+        if (incentiveInfo.lastUpdateTime == 0) {
+            revert Bagholder__IncentiveNonexistent();
+        }
+
         /// -----------------------------------------------------------------------
         /// State updates
         /// -----------------------------------------------------------------------
@@ -623,13 +634,63 @@ contract Bagholder is Multicall, SelfPermit {
         /// -----------------------------------------------------------------------
 
         // transfer reward to user
-        key.rewardToken.safeTransferFrom(
-            address(this),
-            recipient,
-            rewardAmount
-        );
+        key.rewardToken.safeTransfer(recipient, rewardAmount);
 
         emit ClaimRewards(msg.sender, incentiveId, recipient);
+    }
+
+    function claimRefund(IncentiveKey calldata key)
+        external
+        virtual
+        returns (uint256 refundAmount)
+    {
+        bytes32 incentiveId = key.compute();
+
+        /// -----------------------------------------------------------------------
+        /// Storage loads
+        /// -----------------------------------------------------------------------
+
+        IncentiveInfo memory incentiveInfo = incentiveInfos[incentiveId];
+        refundAmount = incentiveInfo.accruedRefund;
+
+        // ensure the incentive exists
+        if (incentiveInfo.lastUpdateTime == 0) {
+            revert Bagholder__IncentiveNonexistent();
+        }
+
+        /// -----------------------------------------------------------------------
+        /// State updates
+        /// -----------------------------------------------------------------------
+
+        // accrue rewards
+        uint256 lastTimeRewardApplicable = min(block.timestamp, key.endTime);
+        uint256 rewardPerToken_ = _rewardPerToken(
+            incentiveInfo,
+            lastTimeRewardApplicable
+        );
+
+        if (incentiveInfo.numberOfStakedTokens == 0) {
+            // [lastUpdateTime, lastTimeRewardApplicable] was a period without any staked NFTs
+            // accrue refund
+            refundAmount +=
+                incentiveInfo.rewardRatePerSecond *
+                (lastTimeRewardApplicable - incentiveInfo.lastUpdateTime);
+        }
+        incentiveInfo.rewardPerTokenStored = rewardPerToken_;
+        incentiveInfo.lastUpdateTime = lastTimeRewardApplicable.safeCastTo64();
+        incentiveInfo.accruedRefund = 0;
+
+        // update incentive state
+        incentiveInfos[incentiveId] = incentiveInfo;
+
+        /// -----------------------------------------------------------------------
+        /// External calls
+        /// -----------------------------------------------------------------------
+
+        // transfer refund to recipient
+        key.rewardToken.safeTransfer(key.refundRecipient, refundAmount);
+
+        emit ClaimRefund(msg.sender, incentiveId, refundAmount);
     }
 
     /// -----------------------------------------------------------------------
@@ -719,8 +780,16 @@ contract Bagholder is Multicall, SelfPermit {
             lastTimeRewardApplicable
         );
 
+        if (incentiveInfo.numberOfStakedTokens == 0) {
+            // [lastUpdateTime, lastTimeRewardApplicable] was a period without any staked NFTs
+            // accrue refund
+            incentiveInfo.accruedRefund +=
+                incentiveInfo.rewardRatePerSecond *
+                (lastTimeRewardApplicable - incentiveInfo.lastUpdateTime);
+        }
         incentiveInfo.rewardPerTokenStored = rewardPerToken_;
         incentiveInfo.lastUpdateTime = lastTimeRewardApplicable.safeCastTo64();
+
         stakerInfo.totalRewardUnclaimed = _earned(stakerInfo, rewardPerToken_)
             .safeCastTo192();
         stakerInfo.rewardPerTokenStored = rewardPerToken_;

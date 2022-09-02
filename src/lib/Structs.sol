@@ -6,6 +6,7 @@ import {ERC721} from "solmate/tokens/ERC721.sol";
 
 /// @param nft the NFT to incentivize
 /// @param rewardToken the token used to reward stakers
+/// @param refundRecipient the recipient of the refunded reward tokens
 /// @param startTime the Unix timestamp (in seconds) when the incentive begins
 /// @param endTime the Unix timestamp (in seconds) when the incentive ends
 /// @param bondAmount the amount of ETH a staker needs to put up as bond, should be
@@ -13,6 +14,7 @@ import {ERC721} from "solmate/tokens/ERC721.sol";
 struct IncentiveKey {
     ERC721 nft;
     ERC20 rewardToken;
+    address refundRecipient;
     uint256 startTime;
     uint256 endTime;
     uint256 bondAmount;
@@ -32,11 +34,14 @@ struct StakerInfo {
 /// @param numberOfStakedTokens the number of NFTs staked in the specified incentive
 /// @param lastUpdateTime the Unix timestamp (in seconds) when the incentive info was last updated,
 /// or the incentive's endTime if the time of the last update was after endTime
+/// @param accruedRefund the amount of reward tokens to refund to the incentive creator from periods
+/// where there are no staked NFTs in the incentive
 struct IncentiveInfo {
     uint256 rewardPerTokenStored;
     uint128 rewardRatePerSecond;
     uint64 numberOfStakedTokens;
     uint64 lastUpdateTime;
+    uint256 accruedRefund;
 }
 
 struct StakeMultipleInput {

@@ -21,13 +21,19 @@ contract BagholderTest is Test {
     uint256 constant INCENTIVE_LENGTH = 30 days;
     uint256 constant INCENTIVE_AMOUNT = 1000 ether;
     uint256 constant MAX_ERROR_PERCENT = 1e9; // 10**-9
+    uint8 constant PROTOCOL_FEE = 10; // 1%
+    uint256 constant INCENTIVE_AMOUNT_AFTER_FEE =
+        (INCENTIVE_AMOUNT * (1000 - PROTOCOL_FEE)) / 1000;
     address alice = makeAddr("Alice");
     address bob = makeAddr("Bob");
     address refundRecipient = makeAddr("Refund Recipient");
+    address feeRecipient = makeAddr("Fee Recipient");
 
     function setUp() public {
         // deploy Bagholder
-        bagholder = new Bagholder();
+        bagholder = new Bagholder(
+            ProtocolFeeInfo({recipient: feeRecipient, fee: PROTOCOL_FEE})
+        );
 
         // deploy mock NFT
         nft = new TestERC721();
@@ -302,7 +308,7 @@ contract BagholderTest is Test {
         // verify reward amount
         assertApproxEqRel(
             bagholder.earned(key, alice),
-            INCENTIVE_AMOUNT / 3,
+            INCENTIVE_AMOUNT_AFTER_FEE / 3,
             1e9,
             "reward amount incorrect"
         );
@@ -313,7 +319,7 @@ contract BagholderTest is Test {
         // verify reward amount
         assertApproxEqRel(
             bagholder.earned(key, alice),
-            INCENTIVE_AMOUNT,
+            INCENTIVE_AMOUNT_AFTER_FEE,
             1e9,
             "reward amount incorrect"
         );
@@ -324,7 +330,7 @@ contract BagholderTest is Test {
         // verify reward amount
         assertApproxEqRel(
             bagholder.earned(key, alice),
-            INCENTIVE_AMOUNT,
+            INCENTIVE_AMOUNT_AFTER_FEE,
             1e9,
             "still earning reward after incentive end"
         );
@@ -336,13 +342,13 @@ contract BagholderTest is Test {
         // verify reward amount
         assertApproxEqRel(
             rewardAmount,
-            INCENTIVE_AMOUNT,
+            INCENTIVE_AMOUNT_AFTER_FEE,
             1e9,
             "claimed reward incorrect"
         );
         assertApproxEqRel(
             token.balanceOf(alice) - beforeBalance,
-            INCENTIVE_AMOUNT,
+            INCENTIVE_AMOUNT_AFTER_FEE,
             1e9,
             "actual claimed reward incorrect"
         );
@@ -363,13 +369,13 @@ contract BagholderTest is Test {
         // verify reward amount
         assertApproxEqRel(
             bagholder.earned(key, alice),
-            INCENTIVE_AMOUNT / 3 / 3,
+            INCENTIVE_AMOUNT_AFTER_FEE / 3 / 3,
             MAX_ERROR_PERCENT,
             "alice reward amount incorrect"
         );
         assertApproxEqRel(
             bagholder.earned(key, bob),
-            (INCENTIVE_AMOUNT * 2) / 3 / 3,
+            (INCENTIVE_AMOUNT_AFTER_FEE * 2) / 3 / 3,
             MAX_ERROR_PERCENT,
             "bob reward amount incorrect"
         );
@@ -401,13 +407,13 @@ contract BagholderTest is Test {
         // verify reward amount
         assertApproxEqRel(
             bagholder.earned(key, alice),
-            INCENTIVE_AMOUNT / 4,
+            INCENTIVE_AMOUNT_AFTER_FEE / 4,
             MAX_ERROR_PERCENT,
             "alice reward amount from the first incentive is incorrect"
         );
         assertApproxEqRel(
             bagholder.earned(k, alice),
-            INCENTIVE_AMOUNT / 4,
+            INCENTIVE_AMOUNT_AFTER_FEE / 4,
             MAX_ERROR_PERCENT,
             "alice reward amount from the second incentive is incorrect"
         );
@@ -430,13 +436,13 @@ contract BagholderTest is Test {
         // verify reward amount
         assertApproxEqRel(
             bagholder.earned(key, alice),
-            INCENTIVE_AMOUNT / 4 + INCENTIVE_AMOUNT / 8,
+            INCENTIVE_AMOUNT_AFTER_FEE / 4 + INCENTIVE_AMOUNT_AFTER_FEE / 8,
             MAX_ERROR_PERCENT,
             "alice reward amount incorrect"
         );
         assertApproxEqRel(
             bagholder.earned(key, bob),
-            INCENTIVE_AMOUNT / 8 + INCENTIVE_AMOUNT / 4,
+            INCENTIVE_AMOUNT_AFTER_FEE / 8 + INCENTIVE_AMOUNT_AFTER_FEE / 4,
             MAX_ERROR_PERCENT,
             "bob reward amount incorrect"
         );
@@ -447,7 +453,7 @@ contract BagholderTest is Test {
         // verify refund amount
         assertApproxEqRel(
             refundAmount,
-            INCENTIVE_AMOUNT / 4,
+            INCENTIVE_AMOUNT_AFTER_FEE / 4,
             MAX_ERROR_PERCENT,
             "refund amount incorrect"
         );
@@ -484,7 +490,7 @@ contract BagholderTest is Test {
         // verify refund amount
         assertApproxEqRel(
             refundAmount,
-            (INCENTIVE_AMOUNT * 2) / 3,
+            (INCENTIVE_AMOUNT_AFTER_FEE * 2) / 3,
             MAX_ERROR_PERCENT,
             "refund amount incorrect"
         );
@@ -500,9 +506,31 @@ contract BagholderTest is Test {
         // verify refund amount
         assertApproxEqRel(
             refundAmount,
-            INCENTIVE_AMOUNT,
+            INCENTIVE_AMOUNT_AFTER_FEE,
             MAX_ERROR_PERCENT,
             "refund amount incorrect"
+        );
+    }
+
+    function test_createIncentive() public {
+        IncentiveKey memory k = IncentiveKey({
+            nft: nft,
+            rewardToken: token,
+            startTime: block.timestamp,
+            endTime: block.timestamp + INCENTIVE_LENGTH,
+            bondAmount: BOND / 2,
+            refundRecipient: refundRecipient
+        });
+        token.mint(address(this), INCENTIVE_AMOUNT);
+        uint256 beforeBalance = token.balanceOf(feeRecipient);
+        bagholder.createIncentive(k, INCENTIVE_AMOUNT);
+
+        // verify protocol fee amount
+        assertApproxEqRel(
+            token.balanceOf(feeRecipient) - beforeBalance,
+            (INCENTIVE_AMOUNT * PROTOCOL_FEE) / 1000,
+            MAX_ERROR_PERCENT,
+            "protocol fee amount incorrect"
         );
     }
 

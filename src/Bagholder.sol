@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0
 pragma solidity ^0.8.14;
 
+import {BoringOwnable} from "boringsolidity/BoringOwnable.sol";
+
 import {Multicall} from "openzeppelin/utils/Multicall.sol";
 
 import {ERC20} from "solmate/tokens/ERC20.sol";
@@ -22,7 +24,7 @@ import {IncentiveId} from "./lib/IncentiveId.sol";
 /// precious NFTs leave their wallets.
 /// @dev Uses an optimistic staking model where if someone staked and then transferred
 /// their NFT elsewhere, someone else can slash them and receive the staker's bond.
-contract Bagholder is Multicall, SelfPermit {
+contract Bagholder is Multicall, SelfPermit, BoringOwnable {
     /// -----------------------------------------------------------------------
     /// Library usage
     /// -----------------------------------------------------------------------
@@ -64,6 +66,10 @@ contract Bagholder is Multicall, SelfPermit {
     /// @notice Thrown when creating an incentive that already exists
     error Bagholder__IncentiveAlreadyExists();
 
+    /// @notice Thrown when setting the protocol fee recipient to the zero address
+    /// while having a non-zero protocol fee
+    error Bagholder_ProtocolFeeRecipientIsZero();
+
     /// -----------------------------------------------------------------------
     /// Events
     /// -----------------------------------------------------------------------
@@ -89,7 +95,8 @@ contract Bagholder is Multicall, SelfPermit {
         address indexed sender,
         bytes32 indexed incentiveId,
         IncentiveKey key,
-        uint256 rewardAmount
+        uint256 rewardAmount,
+        uint256 protocolFeeAmount
     );
     event ClaimRewards(
         address indexed staker,
@@ -101,6 +108,7 @@ contract Bagholder is Multicall, SelfPermit {
         bytes32 indexed incentiveId,
         uint256 refundAmount
     );
+    event SetProtocolFee(ProtocolFeeInfo protocolFeeInfo_);
 
     /// -----------------------------------------------------------------------
     /// Constants
@@ -125,6 +133,24 @@ contract Bagholder is Multicall, SelfPermit {
     /// @notice Records accounting info about each incentive.
     /// @dev incentive ID => info
     mapping(bytes32 => IncentiveInfo) public incentiveInfos;
+
+    /// @notice Stores the amount and recipient of the protocol fee
+    ProtocolFeeInfo public protocolFeeInfo;
+
+    /// -----------------------------------------------------------------------
+    /// Constructor
+    /// -----------------------------------------------------------------------
+
+    constructor(ProtocolFeeInfo memory protocolFeeInfo_) {
+        if (
+            protocolFeeInfo_.fee != 0 &&
+            protocolFeeInfo_.recipient == address(0)
+        ) {
+            revert Bagholder_ProtocolFeeRecipientIsZero();
+        }
+        protocolFeeInfo = protocolFeeInfo_;
+        emit SetProtocolFee(protocolFeeInfo_);
+    }
 
     /// -----------------------------------------------------------------------
     /// Public actions
@@ -537,6 +563,7 @@ contract Bagholder is Multicall, SelfPermit {
         /// -----------------------------------------------------------------------
 
         bytes32 incentiveId = key.compute();
+        ProtocolFeeInfo memory protocolFeeInfo_ = protocolFeeInfo;
 
         // ensure incentive doesn't already exist
         if (incentiveInfos[incentiveId].lastUpdateTime != 0) {
@@ -551,6 +578,17 @@ contract Bagholder is Multicall, SelfPermit {
             key.endTime < block.timestamp
         ) {
             revert Bagholder__InvalidIncentiveKey();
+        }
+
+        // apply protocol fee
+        uint256 protocolFeeAmount;
+        if (protocolFeeInfo_.fee != 0) {
+            protocolFeeAmount = FullMath.mulDiv(
+                rewardAmount,
+                protocolFeeInfo_.fee,
+                1000
+            );
+            rewardAmount -= protocolFeeAmount;
         }
 
         // ensure incentive amount makes sense
@@ -584,7 +622,22 @@ contract Bagholder is Multicall, SelfPermit {
             rewardAmount
         );
 
-        emit CreateIncentive(msg.sender, incentiveId, key, rewardAmount);
+        // transfer protocol fee
+        if (protocolFeeAmount != 0) {
+            key.rewardToken.safeTransferFrom(
+                msg.sender,
+                protocolFeeInfo_.recipient,
+                protocolFeeAmount
+            );
+        }
+
+        emit CreateIncentive(
+            msg.sender,
+            incentiveId,
+            key,
+            rewardAmount,
+            protocolFeeAmount
+        );
     }
 
     /// @notice Claims the reward tokens the caller has earned from a particular incentive.
@@ -734,6 +787,29 @@ contract Bagholder is Multicall, SelfPermit {
                     lastTimeRewardApplicable
                 )
             );
+    }
+
+    /// -----------------------------------------------------------------------
+    /// Owner functions
+    /// -----------------------------------------------------------------------
+
+    /// @notice Updates the protocol fee and/or the protocol fee recipient.
+    /// Only callable by the owner.
+    /// @param protocolFeeInfo_ The new protocol fee info
+    function ownerSetProtocolFee(ProtocolFeeInfo calldata protocolFeeInfo_)
+        external
+        virtual
+        onlyOwner
+    {
+        if (
+            protocolFeeInfo_.fee != 0 &&
+            protocolFeeInfo_.recipient == address(0)
+        ) {
+            revert Bagholder_ProtocolFeeRecipientIsZero();
+        }
+        protocolFeeInfo = protocolFeeInfo_;
+
+        emit SetProtocolFee(protocolFeeInfo_);
     }
 
     /// -----------------------------------------------------------------------

@@ -9,6 +9,7 @@ remappings = [
   "forge-std/=lib/forge-std/src/",
   "v3-core/=lib/v3-core/contracts/",
   "v3-periphery/=lib/v3-periphery/contracts/",
+  "boringsolidity/=lib/boringsolidity/contracts/",
   "openzeppelin/=lib/openzeppelin-contracts/contracts/",
   "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
 ]

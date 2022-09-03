@@ -44,7 +44,16 @@ struct IncentiveInfo {
     uint256 accruedRefund;
 }
 
+/// @param key the incentive to stake into
+/// @param nftId the ID of the NFT to stake
 struct StakeMultipleInput {
     IncentiveKey key;
     uint256 nftId;
+}
+
+/// @param fee The fee value. Each increment represents 0.1%, so max is 25.5% (8 bits)
+/// @param recipient The address that will receive the protocol fees
+struct ProtocolFeeInfo {
+    uint8 fee;
+    address recipient;
 }

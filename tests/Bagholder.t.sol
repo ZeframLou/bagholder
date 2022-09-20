@@ -352,6 +352,23 @@ contract BagholderTest is Test {
             1e9,
             "actual claimed reward incorrect"
         );
+
+        // claim again just to be safe
+        rewardAmount = bagholder.claimRewards(key, alice);
+
+        // verify reward amount
+        assertApproxEqRel(
+            rewardAmount,
+            0,
+            1e9,
+            "second claimed reward incorrect"
+        );
+        assertApproxEqRel(
+            token.balanceOf(alice) - beforeBalance,
+            INCENTIVE_AMOUNT_AFTER_FEE,
+            1e9,
+            "second actual claimed reward incorrect"
+        );
     }
 
     function test_twoStakersAndWait() public {
@@ -486,6 +503,29 @@ contract BagholderTest is Test {
 
         // claim refund
         uint256 refundAmount = bagholder.claimRefund(key);
+
+        // verify refund amount
+        assertApproxEqRel(
+            refundAmount,
+            (INCENTIVE_AMOUNT_AFTER_FEE * 2) / 3,
+            MAX_ERROR_PERCENT,
+            "refund amount incorrect"
+        );
+    }
+
+    function test_claimRefundTwice() public {
+        startHoax(alice);
+        skip(INCENTIVE_LENGTH / 3);
+        bagholder.stake{value: BOND}(key, 1);
+        skip(INCENTIVE_LENGTH / 3);
+        bagholder.unstake(key, 1, alice);
+        skip(INCENTIVE_LENGTH / 3);
+
+        // claim refund
+        uint256 beforeBalance = token.balanceOf(refundRecipient);
+        bagholder.claimRefund(key);
+        bagholder.claimRefund(key);
+        uint256 refundAmount = token.balanceOf(refundRecipient) - beforeBalance;
 
         // verify refund amount
         assertApproxEqRel(
